@@ -1,55 +1,141 @@
--- Create ScreenGui
-local screenGui = Instance.new("ScreenGui")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui", playerGui)
 screenGui.Name = "AutoBondsUI"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Create Toggle Button
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 100, 0, 40)
-toggleButton.Position = UDim2.new(0, 10, 0, 10)
-toggleButton.Text = "Zen Hub"
-toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextSize = 18
-toggleButton.Parent = screenGui
+local toggleBtn = Instance.new("TextButton", screenGui)
+toggleBtn.Size = UDim2.new(0, 120, 0, 40)
+toggleBtn.Position = UDim2.new(0, 20, 0, 20)
+toggleBtn.Text = "Zen Hub"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 20
 
--- Create Main Frame
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 200)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-mainFrame.BorderSizePixel = 0
-mainFrame.Visible = false
-mainFrame.Parent = screenGui
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 300, 0, 220)
+frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.Visible = false
 
--- Title
-local title = Instance.new("TextLabel")
+local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1, 0, 0, 40)
 title.Text = "Auto Bonds"
-title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.BackgroundColor3 = Color3.fromRGB(50, 0, 0)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 20
-title.Parent = mainFrame
 
--- Close Button inside frame
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0, 100, 0, 30)
-closeButton.Position = UDim2.new(0.5, -50, 1, -40)
-closeButton.Text = "Close"
-closeButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Font = Enum.Font.SourceSansBold
-closeButton.TextSize = 18
-closeButton.Parent = mainFrame
+local startBtn = Instance.new("TextButton", frame)
+startBtn.Size = UDim2.new(0, 120, 0, 40)
+startBtn.Position = UDim2.new(0.5, -130, 0, 60)
+startBtn.Text = "Start"
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.Font = Enum.Font.SourceSansBold
+startBtn.TextSize = 20
 
--- Toggle behavior
-toggleButton.MouseButton1Click:Connect(function()
-	mainFrame.Visible = not mainFrame.Visible
+local stopBtn = Instance.new("TextButton", frame)
+stopBtn.Size = UDim2.new(0, 120, 0, 40)
+stopBtn.Position = UDim2.new(0.5, 10, 0, 60)
+stopBtn.Text = "Stop"
+stopBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopBtn.Font = Enum.Font.SourceSansBold
+stopBtn.TextSize = 20
+
+local bondText = Instance.new("TextLabel", frame)
+bondText.Size = UDim2.new(1, -20, 0, 30)
+bondText.Position = UDim2.new(0, 10, 1, -40)
+bondText.Text = "Bonds Collected: 0"
+bondText.TextColor3 = Color3.fromRGB(255, 255, 255)
+bondText.BackgroundTransparency = 1
+bondText.Font = Enum.Font.SourceSans
+bondText.TextSize = 18
+bondText.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Logic
+local running = false
+local bondsCollected = 0
+
+local function safeTeleport(pos)
+	-- Move with a safe tween (anti-cheat)
+	local tween = TweenService:Create(root, TweenInfo.new((root.Position - pos).Magnitude / 50, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
+	tween:Play()
+	tween.Completed:Wait()  -- Wait until the tween is done to ensure movement is complete
+end
+
+local function getBonds()
+	local bonds = {}
+	for _, v in pairs(workspace:GetDescendants()) do
+		if v:IsA("Part") and v.Name:lower():find("bond") and v:FindFirstChild("TouchInterest") then
+			table.insert(bonds, v)
+		end
+	end
+	return bonds
+end
+
+local function autoBondLoop()
+	while running do
+		local found = getBonds()
+		if #found > 0 then
+			table.sort(found, function(a, b)
+				-- Sorting bonds by proximity
+				return (a.Position - root.Position).Magnitude < (b.Position - root.Position).Magnitude
+			end)
+
+			for _, bond in pairs(found) do
+				if not running then break end
+
+				local bondPos = bond.Position - Vector3.new(0, 2, 0) -- position slightly under the bond
+				safeTeleport(bondPos)  -- Teleport safely to the bond
+
+				wait(0.3)  -- Wait before checking for the next bond
+
+				-- Collect the bond (example implementation, replace with actual collection code)
+				if bond.Parent == nil then
+					bondsCollected = bondsCollected + 1
+					bondText.Text = "Bonds Collected: " .. bondsCollected
+				end
+			end
+		else
+			-- If no bonds, wait and then server hop logic
+			wait(1)
+			local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+			for _, server in ipairs(servers) do
+				if server.playing < server.maxPlayers and server.id ~= game.JobId then
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+					break
+				end
+			end
+		end
+		wait(0.3)
+	end
+end
+
+-- UI Buttons
+toggleBtn.MouseButton1Click:Connect(function()
+	frame.Visible = not frame.Visible
 end)
 
-closeButton.MouseButton1Click:Connect(function()
-	mainFrame.Visible = false
+startBtn.MouseButton1Click:Connect(function()
+	if not running then
+		running = true
+		coroutine.wrap(autoBondLoop)()
+	end
+end)
+
+stopBtn.MouseButton1Click:Connect(function()
+	running = false
 end)
