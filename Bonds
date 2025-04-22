@@ -1,15 +1,12 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
-
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
 local playerGui = player:WaitForChild("PlayerGui")
 
--- GUI Setup
+-- UI Setup
 local screenGui = Instance.new("ScreenGui", playerGui)
 screenGui.Name = "AutoBondsUI"
 screenGui.ResetOnSpawn = false
@@ -69,11 +66,27 @@ bondText.TextXAlignment = Enum.TextXAlignment.Left
 local running = false
 local bondsCollected = 0
 
-local function safeTeleport(pos)
-	-- Move with a safe tween (anti-cheat)
-	local tween = TweenService:Create(root, TweenInfo.new((root.Position - pos).Magnitude / 50, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
-	tween:Play()
-	tween.Completed:Wait()  -- Wait until the tween is done to ensure movement is complete
+local function createPathPart(position)
+	-- Create a guiding part beneath the rails path to move the player
+	local pathPart = Instance.new("Part")
+	pathPart.Size = Vector3.new(10, 1, 10)
+	pathPart.Position = position
+	pathPart.Anchored = true
+	pathPart.CanCollide = false
+	pathPart.Transparency = 0.5
+	pathPart.BrickColor = BrickColor.new("Bright blue")
+	pathPart.Parent = workspace
+	return pathPart
+end
+
+local function moveAlongPath(pathParts)
+	for _, part in ipairs(pathParts) do
+		local partPos = part.Position
+		local tween = TweenService:Create(root, TweenInfo.new((root.Position - partPos).Magnitude / 50, Enum.EasingStyle.Linear), {CFrame = CFrame.new(partPos)})
+		tween:Play()
+		tween.Completed:Wait()  -- Wait until the tween is done to ensure movement is complete
+		wait(0.3)
+	end
 end
 
 local function getBonds()
@@ -99,7 +112,7 @@ local function autoBondLoop()
 				if not running then break end
 
 				local bondPos = bond.Position - Vector3.new(0, 2, 0) -- position slightly under the bond
-				safeTeleport(bondPos)  -- Teleport safely to the bond
+				moveAlongPath({createPathPart(bondPos)})  -- Create a path part below bond and move player to it
 
 				wait(0.3)  -- Wait before checking for the next bond
 
@@ -133,6 +146,7 @@ startBtn.MouseButton1Click:Connect(function()
 	if not running then
 		running = true
 		coroutine.wrap(autoBondLoop)()
+		moveAlongPath({createPathPart(root.Position + Vector3.new(0, -5, 0))}) -- Start moving player under the rail path
 	end
 end)
 
