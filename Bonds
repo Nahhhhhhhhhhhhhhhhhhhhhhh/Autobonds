@@ -6,6 +6,10 @@ local character = player.Character or player.CharacterAdded:Wait()
 local root = character:WaitForChild("HumanoidRootPart")
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Fly and Noclip Settings
+local flying = false
+local noclip = false
+
 -- UI Setup
 local screenGui = Instance.new("ScreenGui", playerGui)
 screenGui.Name = "AutoBondsUI"
@@ -66,90 +70,135 @@ bondText.TextXAlignment = Enum.TextXAlignment.Left
 local running = false
 local bondsCollected = 0
 
+-- Fly and Noclip Functions
+local function enableFly()
+    local humanoid = character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = true
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+        flying = true
+    end
+end
+
+local function disableFly()
+    local humanoid = character:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = false
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        flying = false
+    end
+end
+
+local function enableNoclip()
+    noclip = true
+    character.HumanoidRootPart.CanCollide = false
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end
+
+local function disableNoclip()
+    noclip = false
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+end
+
 local function createPathPart(position)
-	-- Create a guiding part beneath the rails path to move the player
-	local pathPart = Instance.new("Part")
-	pathPart.Size = Vector3.new(10, 1, 10)
-	pathPart.Position = position
-	pathPart.Anchored = true
-	pathPart.CanCollide = false
-	pathPart.Transparency = 0.5
-	pathPart.BrickColor = BrickColor.new("Bright blue")
-	pathPart.Parent = workspace
-	return pathPart
+    -- Create a guiding part beneath the rails path to move the player
+    local pathPart = Instance.new("Part")
+    pathPart.Size = Vector3.new(10, 1, 10)
+    pathPart.Position = position
+    pathPart.Anchored = true
+    pathPart.CanCollide = false
+    pathPart.Transparency = 0.5
+    pathPart.BrickColor = BrickColor.new("Bright blue")
+    pathPart.Parent = workspace
+    return pathPart
 end
 
 local function moveAlongPath(pathParts)
-	for _, part in ipairs(pathParts) do
-		local partPos = part.Position
-		local tween = TweenService:Create(root, TweenInfo.new((root.Position - partPos).Magnitude / 50, Enum.EasingStyle.Linear), {CFrame = CFrame.new(partPos)})
-		tween:Play()
-		tween.Completed:Wait()  -- Wait until the tween is done to ensure movement is complete
-		wait(0.3)
-	end
+    for _, part in ipairs(pathParts) do
+        local partPos = part.Position
+        local tween = TweenService:Create(root, TweenInfo.new((root.Position - partPos).Magnitude / 50, Enum.EasingStyle.Linear), {CFrame = CFrame.new(partPos)})
+        tween:Play()
+        tween.Completed:Wait()  -- Wait until the tween is done to ensure movement is complete
+        wait(0.3)
+    end
 end
 
 local function getBonds()
-	local bonds = {}
-	for _, v in pairs(workspace:GetDescendants()) do
-		if v:IsA("Part") and v.Name:lower():find("bond") and v:FindFirstChild("TouchInterest") then
-			table.insert(bonds, v)
-		end
-	end
-	return bonds
+    local bonds = {}
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("Part") and v.Name:lower():find("bond") and v:FindFirstChild("TouchInterest") then
+            table.insert(bonds, v)
+        end
+    end
+    return bonds
 end
 
 local function autoBondLoop()
-	while running do
-		local found = getBonds()
-		if #found > 0 then
-			table.sort(found, function(a, b)
-				-- Sorting bonds by proximity
-				return (a.Position - root.Position).Magnitude < (b.Position - root.Position).Magnitude
-			end)
+    while running do
+        local found = getBonds()
+        if #found > 0 then
+            table.sort(found, function(a, b)
+                -- Sorting bonds by proximity
+                return (a.Position - root.Position).Magnitude < (b.Position - root.Position).Magnitude
+            end)
 
-			for _, bond in pairs(found) do
-				if not running then break end
+            for _, bond in pairs(found) do
+                if not running then break end
 
-				local bondPos = bond.Position - Vector3.new(0, 2, 0) -- position slightly under the bond
-				moveAlongPath({createPathPart(bondPos)})  -- Create a path part below bond and move player to it
+                local bondPos = bond.Position - Vector3.new(0, 2, 0) -- position slightly under the bond
+                moveAlongPath({createPathPart(bondPos)})  -- Create a path part below bond and move player to it
 
-				wait(0.3)  -- Wait before checking for the next bond
+                wait(0.3)  -- Wait before checking for the next bond
 
-				-- Collect the bond (example implementation, replace with actual collection code)
-				if bond.Parent == nil then
-					bondsCollected = bondsCollected + 1
-					bondText.Text = "Bonds Collected: " .. bondsCollected
-				end
-			end
-		else
-			-- If no bonds, wait and then server hop logic
-			wait(1)
-			local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
-			for _, server in ipairs(servers) do
-				if server.playing < server.maxPlayers and server.id ~= game.JobId then
-					TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-					break
-				end
-			end
-		end
-		wait(0.3)
-	end
+                -- Collect the bond (example implementation, replace with actual collection code)
+                if bond.Parent == nil then
+                    bondsCollected = bondsCollected + 1
+                    bondText.Text = "Bonds Collected: " .. bondsCollected
+                end
+            end
+        else
+            -- If no bonds, wait and then server hop logic
+            wait(1)
+            local servers = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")).data
+            for _, server in ipairs(servers) do
+                if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                    break
+                end
+            end
+        end
+        wait(0.3)
+    end
 end
 
 -- UI Buttons
 toggleBtn.MouseButton1Click:Connect(function()
-	frame.Visible = not frame.Visible
+    frame.Visible = not frame.Visible
 end)
 
 startBtn.MouseButton1Click:Connect(function()
-	if not running then
-		running = true
-		coroutine.wrap(autoBondLoop)()
-		moveAlongPath({createPathPart(root.Position + Vector3.new(0, -5, 0))}) -- Start moving player under the rail path
-	end
+    if not running then
+        running = true
+        enableFly()
+        enableNoclip()
+        -- Teleport player inside the part and begin movement
+        local partPos = root.Position + Vector3.new(0, -5, 0)  -- Position slightly below the player
+        createPathPart(partPos)
+        moveAlongPath({createPathPart(partPos)})  -- Start moving player under the rail path
+        coroutine.wrap(autoBondLoop)()
+    end
 end)
 
 stopBtn.MouseButton1Click:Connect(function()
-	running = false
+    running = false
+    disableFly()
+    disableNoclip()
 end)
